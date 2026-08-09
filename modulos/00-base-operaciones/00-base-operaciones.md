@@ -426,27 +426,24 @@ az group create --name rg-m00-demo --location westeurope `
 
 En la ruta te advertí de dos recursos capaces de destrozar tu presupuesto: **Azure Firewall (~700 USD/mes)** y **Application Gateway (~180 USD/mes)**. No los vas a necesitar en toda la Fase 1. La forma correcta de garantizar que no aparecen por accidente —o por copiar un tutorial sin leerlo— no es la fuerza de voluntad: es una política que los **deniegue**.
 
-Crea `infra/policy-deny-caros.json`:
+Crea `infra/policy-deny-caros.json`. Ojo a lo que va dentro: `--rules` espera **solo la regla** (`if`/`then`), no el documento completo de la definición. Nada de envolverlo en `policyRule`, y nada de `mode` aquí dentro —ese va como flag del comando.
 
 ```json
 {
-  "mode": "All",
-  "policyRule": {
-    "if": {
-      "field": "type",
-      "in": [
-        "Microsoft.Network/azureFirewalls",
-        "Microsoft.Network/applicationGateways",
-        "Microsoft.Network/bastionHosts",
-        "Microsoft.Network/expressRouteCircuits",
-        "Microsoft.Network/virtualNetworkGateways",
-        "Microsoft.Network/vpnGateways",
-        "Microsoft.Sql/managedInstances",
-        "Microsoft.DBforPostgreSQL/servers"
-      ]
-    },
-    "then": { "effect": "deny" }
-  }
+  "if": {
+    "field": "type",
+    "in": [
+      "Microsoft.Network/azureFirewalls",
+      "Microsoft.Network/applicationGateways",
+      "Microsoft.Network/bastionHosts",
+      "Microsoft.Network/expressRouteCircuits",
+      "Microsoft.Network/virtualNetworkGateways",
+      "Microsoft.Network/vpnGateways",
+      "Microsoft.Sql/managedInstances",
+      "Microsoft.DBforPostgreSQL/servers"
+    ]
+  },
+  "then": { "effect": "deny" }
 }
 ```
 
@@ -455,19 +452,32 @@ Créala y asígnala a tu suscripción:
 ```powershell
 $subId = az account show --query id -o tsv
 
+# --rules no admite una ruta de fichero: hay que pasarle el JSON en linea.
+# Lo generamos desde el fichero para no duplicar la regla.
+$rules = ((Get-Content -Raw infra/policy-deny-caros.json | ConvertFrom-Json) |
+           ConvertTo-Json -Depth 20 -Compress) -replace '"', "'"
+
 az policy definition create `
   --name "deny-recursos-caros" `
   --display-name "Denegar recursos de coste elevado en laboratorio" `
   --description "Impide crear recursos que superan el presupuesto de aprendizaje" `
-  --rules "@infra/policy-deny-caros.json" `
+  --rules $rules `
   --mode All
+
+$policyId = az policy definition show --name "deny-recursos-caros" --query id -o tsv
 
 az policy assignment create `
   --name "deny-caros-sub" `
   --display-name "Freno de coste - suscripcion de laboratorio" `
-  --policy "deny-recursos-caros" `
+  --policy $policyId `
   --scope "/subscriptions/$subId"
 ```
+
+> **Por qué `--rules` no acepta una ruta de fichero.** Es la trampa más cara de este lab en tiempo perdido. Desde que los comandos `az policy` se migraron al framework AAZ, `--rules` intenta primero interpretar el valor como *shorthand syntax*; una ruta como `infra/policy-deny-caros.json` es shorthand perfectamente válido **para una cadena de texto**, así que gana ahí y nunca llega a la rama que cargaría el fichero. El CLI manda la ruta literal a Azure y te responde con un `InvalidPolicyRule` que cita tu propia ruta entrecomillada. Poner `@` delante —el prefijo que sí funciona en otros comandos, como `az storage account management-policy --policy @policy.json`— no cambia nada. De ahí el `ConvertTo-Json` de arriba.
+>
+> El `-replace '"', "'"` convierte las comillas dobles en simples. No es cosmético: es la forma que usan todos los ejemplos del propio `az policy definition create --help`, porque en Windows `az.cmd` destroza las comillas dobles al pasar el argumento. Es seguro aquí porque ningún valor de la regla contiene comillas. Si algún día metes una que sí las tenga, guarda el JSON en un fichero temporal y pásalo por `--rules "$(Get-Content -Raw fichero)"` con cuidado.
+
+> **Asigna por ID, no por nombre.** `--policy` documenta que acepta el nombre corto, pero la resolución se hace dentro del scope y falla con un críptico `Invalid value in --policy or --policy-set-definition`. Resolver el ID completo antes, con `az policy definition show --query id -o tsv`, te ahorra el diagnóstico. Y comprueba que `$subId` no está vacío: si ejecutas solo el bloque de la asignación en una terminal nueva, la variable no existe, el scope queda en `/subscriptions/` y el error que ves culpa a `--policy`.
 
 > **La asignación tarda entre 5 y 30 minutos en hacer efecto.** Si pruebas inmediatamente y el recurso se crea, la policy no ha fallado: aún no se ha propagado. Es un comportamiento normal de Azure Policy que confunde a mucha gente.
 
@@ -536,7 +546,9 @@ $lista = @($grupos -split "`n" | Where-Object { $_ -ne '' })
 
 Write-Host "Se eliminarán $($lista.Count) grupo(s) de recursos:" -ForegroundColor Yellow
 foreach ($g in $lista) {
-    $n = az resource list --resource-group $g --query "length(@)" -o tsv
+    # Ojo: --query "length(@)" se rompe en Windows porque cmd.exe interpreta
+    # los parentesis al pasar por az.cmd. Contamos en PowerShell.
+    $n = @(az resource list --resource-group $g --query "[].id" -o tsv | Where-Object { $_ }).Count
     Write-Host "  - $g  ($n recursos)"
 }
 Write-Host ""
@@ -559,7 +571,11 @@ foreach ($g in $lista) {
 }
 
 Write-Host ""
-Write-Host "Borrados lanzados en segundo plano. Verifica con: az group list -o table" -ForegroundColor Green
+if ($WhatIfPreference) {
+    Write-Host "Simulacion (-WhatIf): no se ha borrado nada." -ForegroundColor Green
+} else {
+    Write-Host "Borrados lanzados en segundo plano. Verifica con: az group list -o table" -ForegroundColor Green
+}
 ```
 
 ### Por qué el script está escrito así

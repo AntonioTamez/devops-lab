@@ -1,0 +1,16 @@
+{
+  "if": {
+    "field": "type",
+    "in": [
+      "Microsoft.Network/azureFirewalls",
+      "Microsoft.Network/applicationGateways",
+      "Microsoft.Network/bastionHosts",
+      "Microsoft.Network/expressRouteCircuits",
+      "Microsoft.Network/virtualNetworkGateways",
+      "Microsoft.Network/vpnGateways",
+      "Microsoft.Sql/managedInstances",
+      "Microsoft.DBforPostgreSQL/servers"
+    ]
+  },
+  "then": { "effect": "deny" }
+}
