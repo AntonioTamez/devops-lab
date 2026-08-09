@@ -1,0 +1,27 @@
+# Secretos y credenciales — NUNCA
+*.pem
+*.key
+*.pfx
+*.publishsettings
+.env
+.env.*
+appsettings.*.local.json
+azureauth.json
+sp-credentials.json
+
+# Terraform (M9)
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
+
+# Bicep/ARM
+*.parameters.local.json
+
+# .NET
+bin/
+obj/
+
+# Sistema
+.DS_Store
+Thumbs.db
