@@ -1,4 +1,4 @@
-# Módulo 0 — Base de operaciones y control de coste
+# Módulo 0 — Base de operaciones y control de coste.
 
 **Duración**: 4 h (2 sesiones de 2 h) · **Prerrequisitos**: ninguno · **Coste esperado**: 0,00 USD
 
